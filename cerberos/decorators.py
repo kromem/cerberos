@@ -60,7 +60,7 @@ def get_failed_access(ip, username):
 
     return failed_access
 
-def check_failed_login(request, response, failed_access):
+def check_failed_login(request, response):
     """
     If is a failed login, save the data in the database.
 
