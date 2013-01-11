@@ -6,7 +6,7 @@ from django.db import models
 from django.utils.translation import ugettext_lazy as _ 
 #from django.core.urlresolvers import reverse
 #from django.contrib.auth.models import User
-from cerberos.settings import MEMORY_FOR_FAILED_LOGINS
+from cerberos.settings import MEMORY_FOR_FAILED_LOGINS, RESET_FAILED_LOGINS
 import datetime
 
 try:
@@ -77,7 +77,7 @@ def expire_for_user(sender, **kwargs):
     When a User is updated (such as for a password update), expires 
     all FailedAccessAttempts for them.
     """
-    if (kwargs.get('created', False) and not kwargs.get('raw', False)):
+    if RESET_FAILED_LOGINS and (kwargs.get('created', False) and not kwargs.get('raw', False)):
         user = kwargs['instance']
         FailedAccessAttempt.objects.filter(username=user.username).update(expired=True)
     return
