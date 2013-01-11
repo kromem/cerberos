@@ -72,9 +72,6 @@ def check_failed_login(request, response):
     username = request.POST.get('username')
     http_accept = request.META.get('HTTP_ACCEPT', 'unknown'),
     path_info = request.META.get('PATH_INFO', 'unknown')
-
-    past_limit_for_ip = past_limit_for_ip(ip)
-    past_limit_for_username = past_limit_for_username(username)
     
     failed_access = get_failed_access(ip, username)
     
@@ -92,7 +89,7 @@ def check_failed_login(request, response):
         failed_access.http_accept = http_accept
         failed_access.path_info = path_info
 
-        if (past_limit_for_ip or past_limit_for_username) and (failed_access.failed_logins >= MAX_FAILSAFE_LOGINS):
+        if (failed_access.failed_logins >= MAX_FAILSAFE_LOGINS) and (past_limit_for_ip(ip) or past_limit_for_username(username)):
             # Lock the user
             failed_access.locked = True
         failed_access.save()
