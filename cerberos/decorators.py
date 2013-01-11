@@ -11,6 +11,7 @@ def watch_logins(func):
 
     def new_func(request, *args, **kwargs):
         response = func(request, *args, **kwargs)
+        ip = request.META.get('REMOTE_ADDR', '')
 
         failed_access = check_failed_login(request, response)
 
