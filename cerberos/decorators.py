@@ -2,19 +2,24 @@
 from django.contrib.sites.models import Site
 from django.db.models import Sum
 from cerberos.models import FailedAccessAttempt
-from cerberos.settings import MAX_FAILED_LOGINS, MEMORY_FOR_FAILED_LOGINS, MAX_FAILSAFE_LOGINS
+from cerberos.settings import MAX_FAILED_LOGINS, MEMORY_FOR_FAILED_LOGINS, MAX_FAILSAFE_LOGINS, CERBEROS_BLOCK_LOGLEVEL
 from django.shortcuts import render_to_response
 from django.template import RequestContext
 import datetime
+
+import logging
+LOG = logging.getLogger(__name__)
 
 def watch_logins(func):
 
     def new_func(request, *args, **kwargs):
         if request.POST:
             ip = request.META.get('REMOTE_ADDR', '')
-            if not check_allowed_login(request):
+            username = request.POST.get('username')
+            failed_access = get_failed_access(ip, username)
+            if not check_allowed_login(request, failed_access):
                 response = func(request, *args, **kwargs)
-                failed_access = process_failed_login(request, response)
+                failed_access = process_failed_login(request, response, failed_access)
 
                 if failed_access.locked:
                     response = get_locked_response(request)
@@ -68,7 +73,7 @@ def get_failed_access(ip, username):
 
     return failed_access
 
-def check_allowed_login(request):
+def check_allowed_login(request, failed_access):
     """
     Checks if the login should be processed or denied.
 
@@ -78,20 +83,19 @@ def check_allowed_login(request):
     ip = request.META.get('REMOTE_ADDR', '')
     username = request.POST.get('username')
 
-    failed_access = get_failed_access(ip, username)
-
     if failed_access:
         if (failed_access.failed_logins >= MAX_FAILSAFE_LOGINS) and (past_limit_for_ip(ip) or past_limit_for_username(username)):
             # Lock the user
             failed_access.locked = True
             failed_access.save()
+            getattr(LOG, CERBEROS_BLOCK_LOGLEVEL)('Blocked ip %s for user %s', (ip, username))
             ret_val = True
     elif not MAX_FAILSAFE_LOGINS and (past_limit_for_ip(ip) or past_limit_for_username(username)):
         ret_val = True
 
     return ret_val
 
-def process_failed_login(request, response):
+def process_failed_login(request, response, failed_access):
     """
     If is a failed login, save the data in the database.
 
@@ -103,8 +107,6 @@ def process_failed_login(request, response):
     username = request.POST.get('username')
     http_accept = request.META.get('HTTP_ACCEPT', 'unknown'),
     path_info = request.META.get('PATH_INFO', 'unknown')
-
-    failed_access = get_failed_access(ip, username)
 
     if not failed_access:
         failed_access = FailedAccessAttempt(ip_address=ip)
@@ -123,6 +125,7 @@ def process_failed_login(request, response):
         if (failed_access.failed_logins >= MAX_FAILSAFE_LOGINS) and (past_limit_for_ip(ip) or past_limit_for_username(username)):
             # Lock the user
             failed_access.locked = True
+            getattr(LOG, CERBEROS_BLOCK_LOGLEVEL)('Blocked ip %s for user %s', (ip, username))
         failed_access.save()
     elif request.method == 'POST' and response.status_code == 302 and failed_access.id and not failed_access.locked:
         # The user logged in successfully. Forgets about the access attempts
@@ -131,7 +134,7 @@ def process_failed_login(request, response):
 
     return failed_access
 
-def get_locked_response(request, ip, failed_access):
+def get_locked_response(request):
     ip = request.META.get('REMOTE_ADDR', '')
     return render_to_response('cerberos/user-locked.html',
                               {

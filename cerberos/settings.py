@@ -8,3 +8,6 @@ MEMORY_FOR_FAILED_LOGINS = getattr(settings, 'MEMORY_FOR_FAILED_LOGINS', 0)
 
 # Should we reset failed logins for a user on User update?
 RESET_FAILED_LOGINS = getattr(settings, 'RESET_FAILED_LOGINS', False)
+
+# What log level should blocks be logged at?
+CERBEROS_BLOCK_LOGLEVEL = getattr(settings, 'CERBEROS_BLOCK_LOGLEVEL', 'debug')
