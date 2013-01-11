@@ -25,7 +25,7 @@ def past_limit_for_ip(ip):
     Returns a boolean representing if logins from ip exceed limit.
     """
     past_limit = False
-    sum_for_ip = FailedAccessAttempt.objects.filter(ip=ip).aggregate(Sum('failed_logins'))
+    sum_for_ip = FailedAccessAttempt.objects.filter(ip_address=ip).aggregate(Sum('failed_logins'))
     if sum_for_ip.get('failed_logins__sum') >= MAX_FAILED_LOGINS:
         past_limit = True
 
