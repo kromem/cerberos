@@ -3,7 +3,7 @@ from django.contrib.sites.models import Site
 from django.contrib.auth.models import User
 from django.db import models
 from django.dispatch import receiver
-from django.db.models.signals import post_save
+from django.db.models.signals import pre_save
 #from django.template.defaultfilters import slugify
 from django.utils.translation import ugettext_lazy as _ 
 #from django.core.urlresolvers import reverse
@@ -72,14 +72,19 @@ class FailedAccessAttempt(models.Model):
             return _(u'%(time_remaining)s seconds' % {'time_remaining': time_remaining})
     get_time_to_forget.short_description = _(u'Time to forget')
 
-@receiver(post_save, sender=User, dispatch_uid="expire_failedaccess")
+@receiver(pre_save, sender=User, dispatch_uid="expire_failedaccess")
 def expire_for_user(sender, **kwargs):
     """Expires all FailedAccessAttempt objects for a user.
 
-    When a User is updated (such as for a password update), expires 
-    all FailedAccessAttempts for them.
+    When a User's password is updated, expires all FailedAccessAttempts for them.
     """
-    if RESET_FAILED_LOGINS and (kwargs.get('created', False) and not kwargs.get('raw', False)):
+    if RESET_FAILED_LOGINS and not (kwargs.get('created', False) and not kwargs.get('raw', False)):
         user = kwargs['instance']
-        FailedAccessAttempt.objects.filter(username=user.username).update(expired=True)
+        try:
+            current_user = User.objects.get(id=user.id)
+        except User.DoesNotExist:    
+            current_user = None
+        else:
+            if current_user.password != user.password:
+                FailedAccessAttempt.objects.filter(username=user.username).update(expired=True)
     return
