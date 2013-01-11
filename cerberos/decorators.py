@@ -10,13 +10,20 @@ import datetime
 def watch_logins(func):
 
     def new_func(request, *args, **kwargs):
-        response = func(request, *args, **kwargs)
-        ip = request.META.get('REMOTE_ADDR', '')
-
-        failed_access = check_failed_login(request, response)
-
-        if failed_access.locked:
-            response = get_locked_response(request, ip, failed_access)
+        if request.POST:
+            ip = request.META.get('REMOTE_ADDR', '')
+            if check_allowed_login(request):
+                response = func(request, *args, **kwargs)
+                failed_access = check_failed_login(request, response)
+                
+                if failed_access.locked:
+                    response = get_locked_response(request, ip, failed_access)
+            
+            else:
+                response = get_locked_response(request, ip, failed_access)
+        
+        else:
+            response = func(request, *args, **kwargs)
 
         return response
     return new_func
@@ -60,6 +67,27 @@ def get_failed_access(ip, username):
             return None
 
     return failed_access
+
+def check_allowed_login(request):
+    """
+    Checks if the login should be processed or denied.
+
+    It returns True or False.
+    """
+    ret_val = False
+    ip = request.META.get('REMOTE_ADDR', '')
+    username = request.POST.get('username')
+    
+    failed_access = FailedAccessAttempt.objects.filter(
+        ip_address=ip, 
+        username=username, 
+        expired=False,
+        locked=True)
+
+    if not failed_access.exists():
+        ret_val = True
+
+    return ret_val
 
 def check_failed_login(request, response):
     """
