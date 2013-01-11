@@ -12,17 +12,16 @@ def watch_logins(func):
     def new_func(request, *args, **kwargs):
         if request.POST:
             ip = request.META.get('REMOTE_ADDR', '')
-            failed_access = check_allowed_login(request)
-            if not failed_access:
+            if not check_allowed_login(request):
                 response = func(request, *args, **kwargs)
-                failed_access = check_failed_login(request, response)
-                
+                failed_access = process_failed_login(request, response)
+
                 if failed_access.locked:
-                    response = get_locked_response(request, ip, failed_access)
-            
+                    response = get_locked_response(request)
+
             else:
-                response = get_locked_response(request, ip, failed_access)
-        
+                response = get_locked_response(request)
+
         else:
             response = func(request, *args, **kwargs)
 
@@ -34,7 +33,7 @@ def past_limit_for_ip(ip):
     Returns a boolean representing if logins from ip exceed limit.
     """
     past_limit = False
-    sum_for_ip = FailedAccessAttempt.objects.filter(ip_address=ip).aggregate(Sum('failed_logins'))
+    sum_for_ip = FailedAccessAttempt.objects.filter(ip_address=ip, expired=False).aggregate(Sum('failed_logins'))
     if sum_for_ip.get('failed_logins__sum') >= MAX_FAILED_LOGINS:
         past_limit = True
 
@@ -45,7 +44,7 @@ def past_limit_for_username(username):
     Returns a boolean representing if logins to username exceed limit.
     """
     past_limit = False
-    sum_for_username = FailedAccessAttempt.objects.filter(username=username).aggregate(Sum('failed_logins'))
+    sum_for_username = FailedAccessAttempt.objects.filter(username=username, expired=False).aggregate(Sum('failed_logins'))
     if sum_for_username.get('failed_logins__sum') >= MAX_FAILED_LOGINS:
         past_limit = True
 
@@ -73,24 +72,26 @@ def check_allowed_login(request):
     """
     Checks if the login should be processed or denied.
 
-    It returns None or a locked FailedAccessAttempt instance.
+    It returns the FailedAccessAttempt instance, None, or a faked instance.
     """
     ret_val = None
     ip = request.META.get('REMOTE_ADDR', '')
     username = request.POST.get('username')
-    
-    failed_access = FailedAccessAttempt.objects.filter(
-        ip_address=ip, 
-        username=username, 
-        expired=False,
-        locked=True)
+
+    failed_access = get_failed_access(ip, username)
 
     if failed_access:
-        ret_val = failed_access.get()
+        if (failed_access.failed_logins >= MAX_FAILSAFE_LOGINS) and (past_limit_for_ip(ip) or past_limit_for_username(username)):
+            # Lock the user
+            failed_access.locked = True
+            failed_access.save()
+            ret_val = True
+    elif not MAX_FAILSAFE_LOGINS and (past_limit_for_ip(ip) or past_limit_for_username(username)):
+        ret_val = True
 
     return ret_val
 
-def check_failed_login(request, response):
+def process_failed_login(request, response):
     """
     If is a failed login, save the data in the database.
 
@@ -102,9 +103,9 @@ def check_failed_login(request, response):
     username = request.POST.get('username')
     http_accept = request.META.get('HTTP_ACCEPT', 'unknown'),
     path_info = request.META.get('PATH_INFO', 'unknown')
-    
+
     failed_access = get_failed_access(ip, username)
-    
+
     if not failed_access:
         failed_access = FailedAccessAttempt(ip_address=ip)
 
@@ -131,9 +132,10 @@ def check_failed_login(request, response):
     return failed_access
 
 def get_locked_response(request, ip, failed_access):
+    ip = request.META.get('REMOTE_ADDR', '')
     return render_to_response('cerberos/user-locked.html',
                               {
                                   'ip':ip,
-                                  'failed_access': failed_access,
+                                  'login_limit': (MAX_FAILSAFE_LOGINS + MAX_FAILED_LOGINS),
                                   },
                               context_instance=RequestContext(request))
