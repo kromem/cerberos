@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from django.contrib.sites.models import Site
+from django.contrib.auth.models import User
 from django.db import models
 #from django.template.defaultfilters import slugify
 from django.utils.translation import ugettext_lazy as _ 
@@ -68,3 +69,15 @@ class FailedAccessAttempt(models.Model):
         else:
             return _(u'%(time_remaining)s seconds' % {'time_remaining': time_remaining})
     get_time_to_forget.short_description = _(u'Time to forget')
+
+@receiver(post_save, sender=User, dispatch_uid="expire_failedaccess")
+def expire_for_user(sender, **kwargs):
+    """Expires all FailedAccessAttempt objects for a user.
+
+    When a User is updated (such as for a password update), expires 
+    all FailedAccessAttempts for them.
+    """
+    if (kwargs.get('created', False) and not kwargs.get('raw', False)):
+        user = kwargs['instance']
+        FailedAccessAttempt.objects.filter(username=user.username).update(expired=True)
+    return
