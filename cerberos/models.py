@@ -2,6 +2,8 @@
 from django.contrib.sites.models import Site
 from django.contrib.auth.models import User
 from django.db import models
+from django.dispatch import receiver
+from django.db.models.signals import post_save
 #from django.template.defaultfilters import slugify
 from django.utils.translation import ugettext_lazy as _ 
 #from django.core.urlresolvers import reverse
@@ -24,7 +26,7 @@ class FailedAccessAttempt(models.Model):
     username = models.CharField(max_length=255, verbose_name=_(u'Username'), blank=False, db_index=True,
             help_text=_(u'Username used to login'))
     failed_logins = models.PositiveIntegerField(verbose_name=_(u'Failed logins'), default=0,
-            help_text=_(u'Failed logins for this IP'))
+            help_text=_(u'Failed logins for this IP and Username'))
     locked = models.BooleanField(verbose_name=_(u'Locked'), default=False, db_index=True,
             help_text=_(u'Indicates if the IP has been locked out.'))
     expired = models.BooleanField(verbose_name=_(u'Expired'), default=False, 
