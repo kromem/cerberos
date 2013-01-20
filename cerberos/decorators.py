@@ -5,13 +5,15 @@ from cerberos.models import FailedAccessAttempt
 from cerberos.settings import MAX_FAILED_LOGINS, MEMORY_FOR_FAILED_LOGINS, MAX_FAILSAFE_LOGINS, CERBEROS_BLOCK_LOGLEVEL
 from django.shortcuts import render_to_response
 from django.template import RequestContext
+from functools import wraps
 import datetime
 
 import logging
 LOG = logging.getLogger(__name__)
 
 def watch_logins(func):
-
+    
+    @wraps(func)
     def new_func(request, *args, **kwargs):
         if request.POST:
             ip = request.META.get('REMOTE_ADDR', '')
